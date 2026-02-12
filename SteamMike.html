@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SteamMike - Advanced AI Lab</title>
+    <style>
+        :root {
+            --steam-blue: #66c0f4;
+            --steam-dark: #171d24;
+            --steam-bg: #1b2838;
+            --steam-text: #c7d5e0;
+            --steam-green: #bbee66;
+            --steam-red: #e64d4d;
+        }
+
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: var(--steam-bg); color: var(--steam-text); margin: 0; padding: 0; overflow-x: hidden; }
+        header { background: var(--steam-dark); padding: 15px 5%; border-bottom: 3px solid var(--steam-blue); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .main-container { max-width: 1300px; margin: 30px auto; padding: 0 20px; }
+
+        /* Catálogo */
+        .grid-juegos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .card-juego { background: #171d24; border-radius: 4px; border: 1px solid #3d6a8d; overflow: hidden; transition: 0.3s; cursor: pointer; }
+        .card-juego:hover { border-color: var(--steam-blue); transform: scale(1.02); }
+        .img-box { width: 100%; height: 180px; background: #000; }
+        .img-box img { width: 100%; height: 100%; object-fit: cover; }
+        .info-box { padding: 12px; }
+
+        /* Modal */
+        #modal-producto { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; justify-content: center; align-items: center; }
+        .modal-content { background: #171d24; padding: 30px; border-radius: 8px; border: 2px solid var(--steam-blue); width: 320px; text-align: center; }
+
+        /* Carrito */
+        #cart-sidebar { position: fixed; right: -400px; top: 0; width: 350px; height: 100%; background: #171d24; border-left: 2px solid var(--steam-blue); transition: 0.4s; z-index: 1000; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; }
+        #cart-sidebar.active { right: 0; }
+        .cart-items { flex-grow: 1; overflow-y: auto; }
+        .item-carrito { background: #1b2838; padding: 10px; margin-bottom: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* CHAT AVANZADO */
+        .area-chat { background: #f0f0f0; color: #333; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        #chat-display { height: 250px; overflow-y: auto; background: white; padding: 15px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; box-shadow: inset 0 0 10px rgba(0,0,0,0.1); }
+        .msg { padding: 8px 15px; border-radius: 18px; max-width: 75%; font-size: 0.95em; line-height: 1.4; }
+        .msg-user { align-self: flex-end; background: var(--steam-blue); color: white; border-bottom-right-radius: 2px; }
+        .msg-bot { align-self: flex-start; background: #e9e9e9; color: #222; border-bottom-left-radius: 2px; border: 1px solid #ddd; }
+        
+        .btn { background: var(--steam-blue); color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        input[type="text"], input[type="number"] { padding: 10px; border-radius: 4px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body onload="init()">
+
+    <div id="modal-producto">
+        <div class="modal-content">
+            <h2 id="m-titulo"></h2>
+            <p id="m-precio" style="color:var(--steam-green); font-weight:bold;"></p>
+            <p>Stock: <span id="m-stock"></span></p>
+            <input type="number" id="m-cant" value="1" min="1" style="width: 50px;"><br><br>
+            <button class="btn" onclick="add()">Añadir al Carrito</button>
+            <button class="btn" style="background:#555" onclick="closeM()">Cerrar</button>
+        </div>
+    </div>
+
+    <div id="cart-sidebar">
+        <h3>Tu Carrito</h3>
+        <div id="cart-items" class="cart-items"></div>
+        <div style="border-top: 1px solid #333; padding-top: 15px;">
+            <p>Total: <span id="cart-total" style="color:var(--steam-green);">$0.00</span></p>
+            <button class="btn" style="width:100%; background:var(--steam-green); color:black;" onclick="pay()">PAGAR</button>
+            <button class="btn" style="width:100%; margin-top:5px; background:#444;" onclick="toggleC()">CERRAR</button>
+        </div>
+    </div>
+
+    <header>
+        <h1>SteamMike AI</h1>
+        <button class="btn" onclick="toggleC()">🛒 Carrito (<span id="cart-count">0</span>)</button>
+    </header>
+
+    <div class="main-container">
+        <div class="grid-juegos" id="grid"></div>
+
+        <div class="area-chat">
+            <h4 style="margin:0 0 10px 0;">Asistente Inteligente (Prueba preguntando por el más barato, el stock o saluda)</h4>
+            <div id="chat-display"></div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="chat-input" placeholder="Escribe aquí..." style="flex-grow: 1;">
+                <button class="btn" onclick="handleChat()">Enviar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const db = [
+            { id: 0, n: "Borderlands 3", p: 30, s: 5, img: "https://img.asmedia.epimg.net/resizer/v2/KCBZR3TQXRPTPK3WWHZZNIBA4I.jpg?auth=320bb9b1132493e0dc27cc129bb39202867d7b5e57000dbb930d423371488b85&width=1200&height=675&smart=true" },
+            { id: 1, n: "R.E.P.O.", p: 20, s: 8, img: "https://i.pinimg.com/236x/41/fc/cb/41fccbc3e859a266af8dccffa1c52117.jpg" },
+            { id: 2, n: "Terraria", p: 10, s: 15, img: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/105600/header.jpg" },
+            { id: 3, n: "Minecraft Dungeons", p: 20, s: 4, img: "https://assets.nintendo.com/image/upload/c_fill,w_1200/q_auto:best/f_auto/dpr_2.0/store/software/switch/70010000021401/59686225dba24636062a421593effdb4fe136bbfd67b11c621fe92ed36a65734" },
+            { id: 4, n: "Halo Infinite", p: 40, s: 6, img: "https://wpassets.halowaypoint.com/wp-content/2021/12/HaloInfinite_CampaignKeyArt_CLEAN_1920x1080.jpg" }
+        ];
+
+        let cart = [];
+        let cur = null;
+
+        function init() {
+            renderGrid();
+            botReply("¡Hola! Soy MikeBot 2.0. Estoy conectado al inventario en tiempo real. ¿Quieres saber cuál es el juego más barato o cuánto stock nos queda?");
+        }
+
+        function renderGrid() {
+            document.getElementById('grid').innerHTML = db.map(j => `
+                <div class="card-juego" onclick="openM(${j.id})">
+                    <div class="img-box"><img src="${j.img}"></div>
+                    <div class="info-box"><strong>${j.n}</strong><br><span style="color:var(--steam-green)">$${j.p}</span></div>
+                </div>
+            `).join('');
+        }
+
+        function openM(id) {
+            cur = db.find(j => j.id === id);
+            document.getElementById('m-titulo').innerText = cur.n;
+            document.getElementById('m-precio').innerText = `$${cur.p}.00`;
+            document.getElementById('m-stock').innerText = cur.s;
+            document.getElementById('modal-producto').style.display = 'flex';
+        }
+
+        function closeM() { document.getElementById('modal-producto').style.display = 'none'; }
+
+        function add() {
+            const c = parseInt(document.getElementById('m-cant').value);
+            if(c > cur.s || c <= 0) return alert("Stock insuficiente.");
+            cur.s -= c;
+            for(let i=0; i<c; i++) cart.push({...cur});
+            updateUI();
+            closeM();
+        }
+
+        function remove(idx) {
+            const item = cart[idx];
+            db.find(j => j.id === item.id).s += 1;
+            cart.splice(idx, 1);
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('cart-count').innerText = cart.length;
+            const total = cart.reduce((a, b) => a + b.p, 0);
+            document.getElementById('cart-total').innerText = `$${total.toFixed(2)}`;
+            document.getElementById('cart-items').innerHTML = cart.map((j, i) => `
+                <div class="item-carrito">
+                    <span>${j.n}</span>
+                    <button class="btn" style="background:var(--steam-red); padding:2px 8px;" onclick="remove(${i})">X</button>
+                </div>
+            `).join('');
+        }
+
+        function toggleC() { document.getElementById('cart-sidebar').classList.toggle('active'); }
+        function pay() { if(cart.length>0) { alert("¡Gracias por tu compra!"); location.reload(); } }
+
+        // --- MOTOR DE IA MEJORADO ---
+        function handleChat() {
+            const input = document.getElementById('chat-input');
+            const txt = input.value.trim();
+            if(!txt) return;
+
+            addMsg(txt, 'user');
+            input.value = "";
+
+            setTimeout(() => {
+                const query = txt.toLowerCase();
+                let r = "Interesante... No tengo una respuesta programada para eso, pero puedo decirte los precios o el stock si gustas.";
+
+                // Inteligencia de Precios y Comparación
+                if(query.includes("barato") || query.includes("económico")) {
+                    const low = [...db].sort((a,b) => a.p - b.p)[0];
+                    r = `El juego más accesible ahora es ${low.n}, cuesta solo $${low.p}.`;
+                }
+                else if(query.includes("caro") || query.includes("costoso")) {
+                    const high = [...db].sort((a,b) => b.p - a.p)[0];
+                    r = `El título premium ahora mismo es ${high.n} con un precio de $${high.p}.`;
+                }
+                // Inteligencia de Stock Dinámico
+                else if(query.includes("stock") || query.includes("cuántos hay")) {
+                    const totalS = db.reduce((a, b) => a + b.s, 0);
+                    r = `En nuestras estanterías virtuales quedan ${totalS} productos en total. ¡Apúrate antes de que se agoten!`;
+                }
+                // Comandos del carrito
+                else if(query.includes("carrito") || query.includes("tengo")) {
+                    r = cart.length > 0 ? `Tienes ${cart.length} productos en el carrito. El total es de $${cart.reduce((a,b)=>a+b.p,0)}.` : "Tu carrito está vacío ahora mismo.";
+                }
+                // Reconocimiento de Juegos Específicos
+                else if(query.includes("halo")) r = "Halo Infinite es nuestra joya de la corona. Lo tenemos por $40.";
+                else if(query.includes("minecraft")) r = "Minecraft Dungeons es perfecto para cooperativo. Está a $20.";
+                else if(query.includes("terraria")) r = "Terraria es un clásico infinito. Solo cuesta $10.";
+                // Saludos y Modales
+                else if(query.includes("hola") || query.includes("que tal")) r = "¡Qué onda gamer! ¿Listo para vaciar tus bolsillos en juegos geniales?";
+                else if(query.includes("gracias")) r = "¡Para eso estoy! ¿Quieres que te ayude con algo más?";
+
+                botReply(r);
+            }, 600);
+        }
+
+        function addMsg(t, type) {
+            const d = document.getElementById('chat-display');
+            d.innerHTML += `<div class="msg msg-${type}">${t}</div>`;
+            d.scrollTop = d.scrollHeight;
+        }
+
+        function botReply(t) { addMsg(t, 'bot'); }
+    </script>
+</body>
+</html>
